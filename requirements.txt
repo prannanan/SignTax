@@ -12,3 +12,4 @@ matplotlib
 timm==1.0.27
 torch==2.12.0+cpu
 torchvision==0.27.0+cpu
+huggingface_hub

@@ -20,6 +20,7 @@ import numpy as np
 import pandas as pd
 import streamlit as st
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 import matplotlib
 matplotlib.use("Agg")
@@ -33,6 +34,12 @@ ROOT = Path(__file__).parent
 DEPTH_PRO_DIR = ROOT / "depth-pro"
 DEPTH_CKPT_DEFAULT = DEPTH_PRO_DIR / "checkpoints" / "depth_pro.pt"
 DETECTOR_CKPT_DEFAULT = ROOT / "Object-Detection-And-Size-Estimation" / "fasterrcnn_resnet101_head.pth"
+
+# Weights are hosted on the Hugging Face Hub so they don't bloat the git repo.
+# When the local checkpoint above is missing (e.g. on Spaces), it's pulled from here.
+HF_WEIGHTS_REPO = "prannanan/SignTax"
+DEPTH_HF_FILE = "depth_pro.pt"
+DETECTOR_HF_FILE = "fasterrcnn_resnet101_finetuned_no_resize.pth"
 
 CLASS_NAMES = ["__background__", "Sign-again", "sign"]   # must match training order (3-class checkpoint)
 TARGET_W, TARGET_H = 3024, 4032            # camera resolution the boxes/depth are aligned to
@@ -84,6 +91,17 @@ def load_detector(detector_ckpt: str):
     model.load_state_dict(state)
     model.to(DEVICE).eval()
     return model
+
+
+@st.cache_resource(show_spinner="Downloading model weights from Hugging Face ...")
+def fetch_weight(filename: str) -> str:
+    """Download a checkpoint from the HF Hub once; return its local cache path."""
+    return hf_hub_download(repo_id=HF_WEIGHTS_REPO, filename=filename)
+
+
+def resolve_ckpt(path_str: str, hf_filename: str) -> str:
+    """Use the local checkpoint if present, otherwise pull it from the HF Hub."""
+    return path_str if Path(path_str).exists() else fetch_weight(hf_filename)
 
 
 # --------------------------------------------------------------------------- #
@@ -264,9 +282,13 @@ with st.sidebar:
     )
     st.caption(f"Calibration factor K = **{CALIB_SCALE:.4f}** (fixed)")
 
-missing = [p for p in (detector_ckpt, depth_ckpt) if not Path(p).exists()]
-if missing:
-    st.error("Checkpoint(s) not found:\n\n" + "\n".join(f"- `{m}`" for m in missing))
+try:
+    detector_ckpt = resolve_ckpt(detector_ckpt, DETECTOR_HF_FILE)
+    depth_ckpt = resolve_ckpt(depth_ckpt, DEPTH_HF_FILE)
+except Exception as exc:  # noqa: BLE001
+    st.error(
+        f"Could not obtain model weights from Hugging Face (`{HF_WEIGHTS_REPO}`):\n\n{exc}"
+    )
     st.stop()
 
 # --- input ----------------------------------------------------------------- #
