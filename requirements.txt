@@ -1,11 +1,14 @@
-# Streamlit Cloud installs Linux CPU wheels.
-# torch's default PyPI wheel is large; this is the minimum the app imports.
+# Streamlit Cloud runs Linux + CPU. The default torch wheel on PyPI bundles
+# multi-GB CUDA libraries and overruns the Cloud install limits (the install
+# fails -> `import torch` still raises ModuleNotFoundError). Pin CPU-only wheels.
+--extra-index-url https://download.pytorch.org/whl/cpu
+
 streamlit
 numpy<2
 pandas
 pillow
 pillow_heif
 matplotlib
-timm
-torch
-torchvision
+timm==1.0.27
+torch==2.12.0+cpu
+torchvision==0.27.0+cpu
