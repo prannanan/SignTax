@@ -1,0 +1,11 @@
+# Streamlit Cloud installs Linux CPU wheels.
+# torch's default PyPI wheel is large; this is the minimum the app imports.
+streamlit
+numpy<2
+pandas
+pillow
+pillow_heif
+matplotlib
+timm
+torch
+torchvision
