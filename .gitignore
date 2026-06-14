@@ -83,6 +83,7 @@ Thumbs.db
 
 # Project-specific: models, datasets, large artifacts
 *.pt
+!fasterrcnn_resnet101_finetuned_no_resize.pt
 *.pth
 *.onnx
 *.h5
