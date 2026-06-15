@@ -21,7 +21,7 @@ import pandas as pd
 import streamlit as st
 import torch
 from huggingface_hub import hf_hub_download
-from PIL import Image
+from PIL import Image, ImageOps
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
@@ -102,6 +102,11 @@ def fetch_weight(filename: str) -> str:
 def resolve_ckpt(path_str: str, hf_filename: str) -> str:
     """Use the local checkpoint if present, otherwise pull it from the HF Hub."""
     return path_str if Path(path_str).exists() else fetch_weight(hf_filename)
+
+
+def load_upright(path) -> Image.Image:
+    """Open an image and apply its EXIF orientation so phone photos aren't sideways."""
+    return ImageOps.exif_transpose(Image.open(path))
 
 
 # --------------------------------------------------------------------------- #
@@ -310,7 +315,7 @@ if uploaded is None:
                 "padding:2px 12px;border-radius:999px;'>✅ ควรทำ (Do)</span>",
                 unsafe_allow_html=True,
             )
-            st.image(str(ROOT / "assets" / "example_do.jpg"), use_container_width=True)
+            st.image(load_upright(ROOT / "assets" / "example_do.jpg"), use_container_width=True)
             st.caption(
                 "รูปป้ายจะต้องอยู่กึ่งกลางเฟรม ไม่ถ่ายเอียง "
                 "ต้องเห็นสภาพแวดล้อมภายนอก เช่น เสาไฟ หรือรถ หรือถนน"
@@ -322,7 +327,7 @@ if uploaded is None:
                 "padding:2px 12px;border-radius:999px;'>❌ ไม่ควรทำ (Don't)</span>",
                 unsafe_allow_html=True,
             )
-            st.image(str(ROOT / "assets" / "example_dont.jpg"), use_container_width=True)
+            st.image(load_upright(ROOT / "assets" / "example_dont.jpg"), use_container_width=True)
             st.caption(
                 "พื้นหลังจะต้องไม่เป็นพื้นหลังที่เป็นกำแพงอย่างเดียว "
                 "หรือเป็นรูปที่ไม่เห็นสภาพแวดล้อมภายนอก"
