@@ -297,34 +297,37 @@ uploaded = st.file_uploader(
     help="The image is aligned to the camera resolution before measuring.",
 )
 
-# --- photo guidance (do / don't examples) ---------------------------------- #
-st.markdown("##### 📸 ตัวอย่างการถ่ายรูป (Photo tips)")
-g_do, g_dont = st.columns(2)
-with g_do:
-    st.markdown(
-        "<span style='background:#1FA46322;color:#1FA463;font-weight:700;"
-        "padding:2px 12px;border-radius:999px;'>✅ ควรทำ (Do)</span>",
-        unsafe_allow_html=True,
-    )
-    st.image(str(ROOT / "assets" / "example_do.jpg"), use_container_width=True)
-    st.caption(
-        "รูปป้ายจะต้องอยู่กึ่งกลางเฟรม ไม่ถ่ายเอียง "
-        "ต้องเห็นสภาพแวดล้อมภายนอก เช่น เสาไฟ หรือรถ หรือถนน"
-    )
-with g_dont:
-    st.markdown(
-        "<span style='background:#E5484D22;color:#E5484D;font-weight:700;"
-        "padding:2px 12px;border-radius:999px;'>❌ ไม่ควรทำ (Don't)</span>",
-        unsafe_allow_html=True,
-    )
-    st.image(str(ROOT / "assets" / "example_dont.jpg"), use_container_width=True)
-    st.caption(
-        "พื้นหลังจะต้องไม่เป็นพื้นหลังที่เป็นกำแพงอย่างเดียว "
-        "หรือเป็นรูปที่ไม่เห็นสภาพแวดล้อมภายนอก"
-    )
-
 if uploaded is None:
     st.info("⬆️ Upload a photo to estimate sign size. Tune thresholds in the sidebar.")
+
+    # --- photo guidance (do / don't examples) ------------------------------ #
+    st.markdown("##### 📸 ตัวอย่างการถ่ายรูป (Photo tips)")
+    g_do, g_dont = st.columns(2)
+    with g_do:
+        with st.container(border=True):
+            st.markdown(
+                "<span style='background:#1FA46322;color:#1FA463;font-weight:700;"
+                "padding:2px 12px;border-radius:999px;'>✅ ควรทำ (Do)</span>",
+                unsafe_allow_html=True,
+            )
+            st.image(str(ROOT / "assets" / "example_do.jpg"), use_container_width=True)
+            st.caption(
+                "รูปป้ายจะต้องอยู่กึ่งกลางเฟรม ไม่ถ่ายเอียง "
+                "ต้องเห็นสภาพแวดล้อมภายนอก เช่น เสาไฟ หรือรถ หรือถนน"
+            )
+    with g_dont:
+        with st.container(border=True):
+            st.markdown(
+                "<span style='background:#E5484D22;color:#E5484D;font-weight:700;"
+                "padding:2px 12px;border-radius:999px;'>❌ ไม่ควรทำ (Don't)</span>",
+                unsafe_allow_html=True,
+            )
+            st.image(str(ROOT / "assets" / "example_dont.jpg"), use_container_width=True)
+            st.caption(
+                "พื้นหลังจะต้องไม่เป็นพื้นหลังที่เป็นกำแพงอย่างเดียว "
+                "หรือเป็นรูปที่ไม่เห็นสภาพแวดล้อมภายนอก"
+            )
+
     with st.expander("ℹ️ How it works"):
         st.markdown(
             "1. **Detect** signs with Faster R-CNN, filter by confidence, merge overlaps (NMS).\n"
