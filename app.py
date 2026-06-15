@@ -323,6 +323,36 @@ with st.spinner("Running detection + depth (this can take a while on CPU) ..."):
         score_thresh, nms_iou, center_frac, CALIB_SCALE, top1,
     )
 
+# --- headline result ------------------------------------------------------- #
+# Hero card: the size of the most-confident sign, shown first so users
+# immediately see what the app produces — width × height.
+if results:
+    primary = max(results, key=lambda r: r["score"])
+    st.markdown(
+        f"""
+        <div style="background:linear-gradient(135deg,#E9FBF1,#EAF2FB);
+                    border:1px solid #D7E6DC;border-radius:18px;
+                    padding:22px 26px;margin-bottom:16px;">
+          <div style="font-size:0.82rem;letter-spacing:.05em;text-transform:uppercase;
+                      color:#5B6B7F;font-weight:700;">Estimated sign size</div>
+          <div style="font-size:2.7rem;font-weight:800;color:#0B2E1A;
+                      line-height:1.1;margin-top:4px;">
+            {primary['width_m']:.2f} m&nbsp;&times;&nbsp;{primary['height_m']:.2f} m
+          </div>
+          <div style="font-size:0.92rem;color:#5B6B7F;margin-top:8px;">
+            width &times; height&nbsp;&nbsp;·&nbsp;&nbsp;{primary['distance_m']:.1f} m away
+            &nbsp;&nbsp;·&nbsp;&nbsp;{primary['class']} ({primary['score']:.0%} confidence)
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if len(results) > 1:
+        st.caption(
+            f"Showing the most confident of {len(results)} detected signs — "
+            "see the full table below."
+        )
+
 # --- summary metrics ------------------------------------------------------- #
 c1, c2, c3, c4 = st.columns(4)
 c1.metric("Signs detected", len(results))
@@ -335,9 +365,9 @@ if results:
 else:
     c4.metric("Nearest sign", "—")
 
-# --- measurements table ---------------------------------------------------- #
+# --- measurements ---------------------------------------------------------- #
 if results:
-    st.subheader("📊 Measurements")
+    st.subheader("📊 All measurements")
     df = pd.DataFrame([{
         "Class": r["class"],
         "Score": round(r["score"], 3),
