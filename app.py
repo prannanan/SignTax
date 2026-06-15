@@ -335,14 +335,6 @@ if results:
 else:
     c4.metric("Nearest sign", "—")
 
-# --- visual output (tabs) -------------------------------------------------- #
-tab_det, tab_depth = st.tabs(["📷 Detections", "🗺️ Depth map"])
-with tab_det:
-    st.pyplot(render_detections(image_np, results), use_container_width=True)
-with tab_depth:
-    st.pyplot(render_depth(depth_map, results), use_container_width=True)
-    st.caption("Inverse-depth heatmap — warmer (red) is closer, cooler (blue) is farther.")
-
 # --- measurements table ---------------------------------------------------- #
 if results:
     st.subheader("📊 Measurements")
@@ -352,8 +344,6 @@ if results:
         "Distance (m)": round(r["distance_m"], 2),
         "Width (m)": round(r["width_m"], 2),
         "Height (m)": round(r["height_m"], 2),
-        "Raw W (m)": round(r["width_m_raw"], 2),
-        "Raw H (m)": round(r["height_m_raw"], 2),
     } for r in results])
 
     st.dataframe(
@@ -364,8 +354,6 @@ if results:
             "Distance (m)": st.column_config.NumberColumn(format="%.2f m"),
             "Width (m)": st.column_config.NumberColumn(format="%.2f m"),
             "Height (m)": st.column_config.NumberColumn(format="%.2f m"),
-            "Raw W (m)": st.column_config.NumberColumn(format="%.2f m"),
-            "Raw H (m)": st.column_config.NumberColumn(format="%.2f m"),
         },
     )
     st.download_button(
@@ -374,6 +362,14 @@ if results:
         file_name=f"signtax_{Path(uploaded.name).stem}.csv",
         mime="text/csv",
     )
-    st.caption("**Width/Height** include the calibration factor K; **Raw** columns are before K.")
+    st.caption("**Width/Height** include the calibration factor K.")
 else:
     st.warning("No detections above the score threshold — try lowering the confidence slider.")
+
+# --- visual output (tabs) -------------------------------------------------- #
+tab_det, tab_depth = st.tabs(["📷 Detections", "🗺️ Depth map"])
+with tab_det:
+    st.pyplot(render_detections(image_np, results), use_container_width=True)
+with tab_depth:
+    st.pyplot(render_depth(depth_map, results), use_container_width=True)
+    st.caption("Inverse-depth heatmap — warmer (red) is closer, cooler (blue) is farther.")
