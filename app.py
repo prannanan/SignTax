@@ -41,7 +41,7 @@ HF_WEIGHTS_REPO = "prannanan/SignTax"
 DEPTH_HF_FILE = "depth_pro.pt"
 DETECTOR_HF_FILE = "fasterrcnn_resnet101_finetuned_no_resize.pth"
 
-CLASS_NAMES = ["__background__", "Sign-again", "sign"]   # must match training order (3-class checkpoint)
+CLASS_NAMES = ["__background__", "sign"]   # must match training order (2-class checkpoint)
 TARGET_W, TARGET_H = 3024, 4032            # camera resolution the boxes/depth are aligned to
 CALIB_SCALE = 1.2404                       # K — size-correction factor fitted in the notebook (## 8b)
 
