@@ -1,5 +1,5 @@
 """
-SignTax — Traffic-sign size estimator (Streamlit app)
+SignTax — Billboard size estimator (Streamlit app)
 
 Wraps the exact pipeline from
 `SignTax_Depth_SizeEstimation take out resize in proprocessing.ipynb`:
@@ -243,7 +243,7 @@ st.markdown(
 # --- header ---------------------------------------------------------------- #
 _dev = str(DEVICE)
 _pill = "#1FA463" if DEVICE.type in ("cuda", "mps") else "#8A98AB"
-st.markdown("# 🪧 SignTax — Traffic-Sign Size Estimator")
+st.markdown("# 🪧 SignTax — Billboard Size Estimator")
 st.markdown(
     f"<span style='color:#5B6B7F'>Faster R-CNN (ResNet101-FPN) + Apple Depth Pro</span>"
     f"&nbsp;&nbsp;<span class='device-pill' style='background:{_pill}22;color:{_pill}'>"
