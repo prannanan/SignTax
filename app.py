@@ -6,7 +6,9 @@ Wraps the exact pipeline from
 
     load image -> Faster R-CNN (ResNet101-FPN) detect -> SCORE_THRESH filter
     -> class-agnostic NMS -> (optional) top-1 -> Depth Pro depth map + focal length
-    -> per box: Z = median depth of central region,  W = w_px * Z / f * K
+    -> per box: Z = median depth of central region
+    -> RANSAC plane-fit inside the box -> surface normal -> foreshortening correction
+       (1/cos of the tilt, separately for width & height) -> W = w_px * Z / f * corr * K
 
 Run:
     depth-pro\\venv\\Scripts\\python.exe -m streamlit run app.py
@@ -44,6 +46,10 @@ DETECTOR_HF_FILE = "fasterrcnn_resnet101_finetuned_no_resize.pth"
 CLASS_NAMES = ["__background__", "sign"]   # must match training order (2-class checkpoint)
 TARGET_W, TARGET_H = 3024, 4032            # camera resolution the boxes/depth are aligned to
 CALIB_SCALE = 1.2404                       # K — size-correction factor fitted in the notebook (## 8b)
+TILT_BAND = 0.5                            # metres: depth window around the box centre used to
+                                           #     drop sky/background before RANSAC plane-fitting
+MAX_CORR = 3.0                             # cap on the 1/cos foreshortening factor (guards against
+                                           #     blow-up when the tilt estimate is near 90 degrees)
 
 DEVICE = torch.device(
     "cuda" if torch.cuda.is_available()
@@ -110,7 +116,69 @@ def load_upright(path) -> Image.Image:
 
 
 # --------------------------------------------------------------------------- #
-# Pipeline (identical math to the notebook)
+# Tilt correction — RANSAC plane-fit on the depth inside a box, then the
+# foreshortening factors 1/cos(tilt) for width and height (mirrors the
+# TiltSign notebook).
+# --------------------------------------------------------------------------- #
+def _backproject_box(depth_map, focal_px, box):
+    """Pixels inside `box` -> 3D points (N,3) + their depth (N,), via pinhole."""
+    h_img, w_img = depth_map.shape
+    x1, y1, x2, y2 = [int(round(v)) for v in box]
+    x1, y1 = max(0, x1), max(0, y1)
+    x2, y2 = min(w_img, x2), min(h_img, y2)
+    cx, cy = w_img / 2.0, h_img / 2.0
+    us, vs = np.meshgrid(np.arange(x1, x2), np.arange(y1, y2))
+    Z = depth_map[y1:y2, x1:x2]
+    X = (us - cx) * Z / focal_px
+    Y = (vs - cy) * Z / focal_px
+    pts = np.stack([X, Y, Z], axis=-1).reshape(-1, 3)
+    return pts, Z.reshape(-1)
+
+
+def _ransac_normal(P, thresh=0.02, iters=200, seed=0):
+    """Robustly fit a plane to 3D points and return its unit normal (or None)."""
+    if len(P) < 50:
+        return None
+    rng = np.random.default_rng(seed)
+    Ps = P if len(P) <= 20000 else P[rng.choice(len(P), 20000, replace=False)]
+    best_cnt, best_n = -1, None
+    for _ in range(iters):
+        a, b, c = Ps[rng.choice(len(Ps), 3, replace=False)]
+        nrm = np.cross(b - a, c - a)
+        nn = np.linalg.norm(nrm)
+        if nn < 1e-9:
+            continue
+        nrm = nrm / nn
+        cnt = int((np.abs((Ps - a) @ nrm) < thresh).sum())
+        if cnt > best_cnt:
+            best_cnt, best_n = cnt, nrm
+    return best_n
+
+
+def box_tilt_correction(depth_map, focal_px, box, Z):
+    """RANSAC plane-fit inside the box -> (corr_w, corr_h, tilt_deg).
+
+    Returns 1/cos of the per-axis tilt so width/height can be un-foreshortened.
+    Falls back to (1, 1, 0) when the depth is too sparse/noisy to fit a plane.
+    """
+    if not np.isfinite(Z):
+        return 1.0, 1.0, 0.0
+    pts, depth = _backproject_box(depth_map, focal_px, box)
+    keep = np.abs(depth - Z) < TILT_BAND            # drop sky/background by depth
+    pts = pts[keep] if keep.sum() >= 50 else pts
+    n = _ransac_normal(pts)
+    if n is None:
+        return 1.0, 1.0, 0.0
+    nx, ny, nz = float(n[0]), float(n[1]), float(n[2])
+    eps = 1e-6
+    corr_w = min(np.sqrt(nx * nx + nz * nz) / (abs(nz) + eps), MAX_CORR)
+    corr_h = min(np.sqrt(ny * ny + nz * nz) / (abs(nz) + eps), MAX_CORR)
+    tilt_deg = float(np.degrees(np.arccos(min(1.0, abs(nz)))))
+    return float(corr_w), float(corr_h), tilt_deg
+
+
+# --------------------------------------------------------------------------- #
+# Pipeline (detector + Depth Pro + tilt correction, matching the notebook)
 # --------------------------------------------------------------------------- #
 def run_pipeline(image_path, detector, depth_model, depth_transform,
                  score_thresh, nms_iou, center_frac, calib_scale, top1):
@@ -149,7 +217,7 @@ def run_pipeline(image_path, detector, depth_model, depth_transform,
     _fl = pred["focallength_px"]
     focal_px = float(_fl.detach().cpu().item()) if torch.is_tensor(_fl) else float(_fl)
 
-    # 6. Per-box distance & real-world size.
+    # 6. Per-box distance, tilt correction, and real-world size.
     results = []
     for box, label, score in zip(boxes, labels, scores):
         x1, y1, x2, y2 = box
@@ -160,14 +228,19 @@ def run_pipeline(image_path, detector, depth_model, depth_transform,
         region = depth_map[ry1:ry2, rx1:rx2]
         Z = float(np.median(region)) if region.size else float("nan")
 
+        # Tilt correction: RANSAC plane-fit inside the box -> foreshortening factors.
+        corr_w, corr_h, tilt_deg = box_tilt_correction(depth_map, focal_px, box, Z)
+
         w_px, h_px = float(x2 - x1), float(y2 - y1)
-        raw_w, raw_h = w_px * Z / focal_px, h_px * Z / focal_px
+        raw_w = w_px * Z / focal_px * corr_w          # tilt-corrected (before calibration)
+        raw_h = h_px * Z / focal_px * corr_h
         name = CLASS_NAMES[int(label)] if int(label) < len(CLASS_NAMES) else f"class_{int(label)}"
         results.append({
             "class": name,
             "score": float(score),
             "box": [float(v) for v in box],
             "distance_m": Z,
+            "tilt_deg": tilt_deg,
             "width_m": raw_w * calib_scale,
             "height_m": raw_h * calib_scale,
             "width_m_raw": raw_w,
@@ -188,7 +261,8 @@ def render_detections(image_np, results):
                                        linewidth=2.5, edgecolor="#1FCB6B", facecolor="none"))
         ax.text(x1, max(0, y1 - 8),
                 f"{r['class']} {r['score']:.2f}\n"
-                f"{r['distance_m']:.1f} m  ·  {r['width_m']:.2f}×{r['height_m']:.2f} m",
+                f"{r['distance_m']:.1f} m  ·  tilt {r.get('tilt_deg', 0):.0f}°  ·  "
+                f"{r['width_m']:.2f}×{r['height_m']:.2f} m",
                 color="#0B2E1A", fontsize=10, va="bottom", weight="bold",
                 bbox=dict(facecolor="#D7FFE6", alpha=0.92, edgecolor="none",
                           boxstyle="round,pad=0.35"))
@@ -337,7 +411,10 @@ if uploaded is None:
         st.markdown(
             "1. **Detect** signs with Faster R-CNN, filter by confidence, merge overlaps (NMS).\n"
             "2. **Estimate depth** with Apple Depth Pro → distance *Z* + focal length *f*.\n"
-            "3. **Measure**: real size = box pixels × *Z* / *f* × *K* (pinhole camera model)."
+            "3. **Measure tilt**: RANSAC plane-fit on the depth inside each box → surface normal "
+            "→ how many degrees the sign is angled away from the camera.\n"
+            "4. **Measure size**: real size = box pixels × *Z* / *f* × *(1/cos tilt)* × *K* — the "
+            "pinhole camera model plus a foreshortening correction so tilted signs aren't underestimated."
         )
     st.stop()
 
@@ -406,6 +483,7 @@ if results:
         "Class": r["class"],
         "Score": round(r["score"], 3),
         "Distance (m)": round(r["distance_m"], 2),
+        "Tilt (°)": round(r.get("tilt_deg", 0.0), 0),
         "Width (m)": round(r["width_m"], 2),
         "Height (m)": round(r["height_m"], 2),
     } for r in results])
@@ -416,6 +494,7 @@ if results:
             "Score": st.column_config.ProgressColumn(
                 "Score", min_value=0.0, max_value=1.0, format="%.2f"),
             "Distance (m)": st.column_config.NumberColumn(format="%.2f m"),
+            "Tilt (°)": st.column_config.NumberColumn(format="%.0f°"),
             "Width (m)": st.column_config.NumberColumn(format="%.2f m"),
             "Height (m)": st.column_config.NumberColumn(format="%.2f m"),
         },
@@ -426,7 +505,7 @@ if results:
         file_name=f"signtax_{Path(uploaded.name).stem}.csv",
         mime="text/csv",
     )
-    st.caption("**Width/Height** include the calibration factor K.")
+    st.caption("**Width/Height** are tilt-corrected (foreshortening) and include the calibration factor K.")
 else:
     st.warning("No detections above the score threshold — try lowering the confidence slider.")
 
