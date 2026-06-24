@@ -389,7 +389,7 @@ if uploaded is None:
                 "padding:2px 12px;border-radius:999px;'>✅ ควรทำ (Do)</span>",
                 unsafe_allow_html=True,
             )
-            st.image(load_upright(ROOT / "assets" / "example_do.jpg"), use_container_width=True)
+            st.image(load_upright(ROOT / "assets" / "example_do.jpg"), width=240)
             st.caption(
                 "รูปป้ายจะต้องอยู่กึ่งกลางเฟรม ไม่ถ่ายเอียง "
                 "ต้องเห็นสภาพแวดล้อมภายนอก เช่น เสาไฟ หรือรถ หรือถนน"
@@ -401,7 +401,7 @@ if uploaded is None:
                 "padding:2px 12px;border-radius:999px;'>❌ ไม่ควรทำ (Don't)</span>",
                 unsafe_allow_html=True,
             )
-            st.image(load_upright(ROOT / "assets" / "example_dont.jpg"), use_container_width=True)
+            st.image(load_upright(ROOT / "assets" / "example_dont.jpg"), width=240)
             st.caption(
                 "พื้นหลังจะต้องไม่เป็นพื้นหลังที่เป็นกำแพงอย่างเดียว "
                 "หรือเป็นรูปที่ไม่เห็นสภาพแวดล้อมภายนอก"
